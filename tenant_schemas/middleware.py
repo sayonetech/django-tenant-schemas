@@ -1,7 +1,7 @@
 import django
 from django.conf import settings
 from django.core.exceptions import DisallowedHost
-from django.db import connection
+from django.db import connection, connections
 from django.http import Http404
 from django.core.urlresolvers import set_urlconf
 
@@ -9,6 +9,7 @@ from tenant_schemas.utils import (
     get_public_schema_name,
     get_tenant_model,
     remove_www,
+    get_db_alias,
 )
 
 
@@ -41,10 +42,16 @@ class BaseTenantMiddleware(django.utils.deprecation.MiddlewareMixin):
         """
         return remove_www(request.get_host().split(":")[0]).lower()
 
+    def set_connection_to_public(self):
+        connection.set_schema_to_public()
+
+    def set_connection_to_tenant(self, tenant):
+        connection.set_tenant(tenant)
+
     def process_request(self, request):
         # Connection needs first to be at the public schema, as this is where
         # the tenant metadata is stored.
-        connection.set_schema_to_public()
+        self.set_connection_to_public()
 
         hostname = self.hostname_from_request(request)
         TenantModel = get_tenant_model()
@@ -63,7 +70,8 @@ class BaseTenantMiddleware(django.utils.deprecation.MiddlewareMixin):
             )
 
         request.tenant = tenant
-        connection.set_tenant(request.tenant)
+
+        self.set_connection_to_tenant(request.tenant)
 
         # Do we have a public-specific urlconf?
         if (
@@ -123,3 +131,17 @@ class DefaultTenantMiddleware(SuspiciousTenantMiddleware):
                 schema_name = get_public_schema_name()
 
             return model.objects.get(schema_name=schema_name)
+
+
+class MultiDBTenantMiddleware(SuspiciousTenantMiddleware):
+    def set_connection_to_public(self):
+        for db in get_db_alias():
+            connections[db].set_schema_to_public()
+
+    def set_connection_to_tenant(self, tenant):
+        for db in get_db_alias():
+            connections[db].set_tenant(tenant)
+
+    # TODO remove this - just for local testing
+    # def get_tenant(self, model, hostname, request):
+    #     return model.objects.get(domain_url=hostname.replace('public.localhost', 'dev.etailpet.com'))

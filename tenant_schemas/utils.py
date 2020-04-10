@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from django.conf import settings
-from django.db import connection
+from django.db import connection, connections
 
 try:
     from django.apps import apps, AppConfig
@@ -10,6 +10,12 @@ except ImportError:
     from django.db.models.loading import get_model
     AppConfig = None
 from django.core import mail
+
+MULTI_DB_ENABLED = True if len(settings.DATABASES.keys()) > 1 else False
+
+
+def get_db_alias():
+    return settings.DATABASES.keys()
 
 
 @contextmanager
@@ -36,6 +42,43 @@ def tenant_context(tenant):
             connection.set_schema_to_public()
         else:
             connection.set_tenant(previous_tenant)
+
+
+# Changes to schema_context and tenant_context when multi db enabled
+if MULTI_DB_ENABLED:
+    def get_previous_tenant_dict():
+        previous_tenant_dict = dict()
+        for db in get_db_alias():
+            previous_tenant_dict[db] = connections[db].tenant
+        return previous_tenant_dict
+
+    def apply_previous_tenant_dict(previous_tenant_dict):
+        if not previous_tenant_dict:
+            for db in get_db_alias():
+                connections[db].set_schema_to_public()
+        else:
+            for db in get_db_alias():
+                connections[db].set_tenant(previous_tenant_dict[db])
+
+    @contextmanager
+    def schema_context(schema_name):
+        previous_tenant_dict = get_previous_tenant_dict()
+        try:
+            for db in get_db_alias():
+                connections[db].set_schema(schema_name)
+            yield
+        finally:
+            apply_previous_tenant_dict(previous_tenant_dict)
+
+    @contextmanager
+    def tenant_context(tenant):
+        previous_tenant_dict = get_previous_tenant_dict()
+        try:
+            for db in get_db_alias():
+                connections[db].set_tenant(tenant)
+            yield
+        finally:
+            apply_previous_tenant_dict(previous_tenant_dict)
 
 
 def get_tenant_model():
@@ -89,6 +132,7 @@ def django_is_in_test_mode():
 
 
 def schema_exists(schema_name):
+    # TODO may be need to get the connection based on the default database to support multidb
     cursor = connection.cursor()
 
     # check if this schema already exists in the db

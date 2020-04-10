@@ -13,6 +13,7 @@ class TenantSyncRouter(object):
         # the imports below need to be done here else django <1.5 goes crazy
         # https://code.djangoproject.com/ticket/20704
         from django.db import connection
+        # TODO may be need to get the connection from connections to support multidb
         from tenant_schemas.utils import get_public_schema_name, app_labels
         from tenant_schemas.postgresql_backend.base import DatabaseWrapper as TenantDbWrapper
 
