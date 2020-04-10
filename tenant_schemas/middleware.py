@@ -3,6 +3,8 @@ from django.conf import settings
 from django.core.exceptions import DisallowedHost
 from django.db import connection
 from django.http import Http404
+from django.core.urlresolvers import set_urlconf
+
 from tenant_schemas.utils import (
     get_public_schema_name,
     get_tenant_model,
@@ -69,6 +71,7 @@ class BaseTenantMiddleware(django.utils.deprecation.MiddlewareMixin):
             and request.tenant.schema_name == get_public_schema_name()
         ):
             request.urlconf = settings.PUBLIC_SCHEMA_URLCONF
+            set_urlconf(request.urlconf)
 
 
 class TenantMiddleware(BaseTenantMiddleware):
