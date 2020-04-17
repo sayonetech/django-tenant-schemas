@@ -210,13 +210,20 @@ class DatabaseSchemaIntrospection(BaseDatabaseIntrospection):
         })
         field_map = {line[0]: line[1:] for line in cursor.fetchall()}
         cursor.execute('SELECT * FROM %s LIMIT 1' % self.connection.ops.quote_name(table_name))
-
+        # To fix issues with django-cms
+        # https://github.com/divio/django-cms/issues/6666
+        # https://code.djangoproject.com/ticket/30331
         return [
-            FieldInfo(*(
-                (force_text(line[0]),) +
-                line[1:6] +
-                (field_map[force_text(line[0])][0] == 'YES', field_map[force_text(line[0])][1])
-            )) for line in cursor.description
+            FieldInfo(
+                line.name,
+                line.type_code,
+                line.display_size,
+                line.internal_size,
+                line.precision,
+                line.scale,
+                *field_map[line.name],
+            )
+            for line in cursor.description
         ]
 
     def get_relations(self, cursor, table_name):
