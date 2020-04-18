@@ -2,6 +2,7 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import connection
 from tenant_schemas.management.commands import InteractiveTenantOption
+from tenant_schemas.utils import tenant_context
 
 
 class Command(InteractiveTenantOption, BaseCommand):
@@ -11,5 +12,5 @@ class Command(InteractiveTenantOption, BaseCommand):
         tenant = self.get_tenant_from_options_or_interactive(
             schema_name=schema_name, **options
         )
-        connection.set_tenant(tenant)
-        call_command(command, *args, **options)
+        with tenant_context(tenant):
+            call_command(command, *args, **options)
